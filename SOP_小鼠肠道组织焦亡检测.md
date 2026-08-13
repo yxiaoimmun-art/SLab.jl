@@ -195,42 +195,80 @@
 
 > 交互式甘特图详见：[gantt_pyroptosis.html](file:///workspace/gantt_pyroptosis.html)
 
+```mermaid
+flowchart TD
+    subgraph SPLIT["样本分流节点"]
+        direction LR
+        S1(["Op 1: 样本分流<br/>SamplePrep_Station<br/>30min · 0→30min"])
+    end
+
+    subgraph WB["WB 蛋白检测路径 · 关键路径 19h"]
+        direction LR
+        subgraph WB_SP["SamplePrep_Station"]
+            direction TB
+            W2["Op 2: 蛋白提取<br/>45min · 31→76min"]
+            W4["Op 4: 蛋白变性<br/>15min · 136→151min"]
+        end
+        W3["Op 3: BCA定量<br/>ProteinQuantifier<br/>60min · 76→136min"]
+        W5["Op 5: SDS-PAGE<br/>Electrophoresis_System<br/>60min · 151→211min"]
+        W6["Op 6: 电转膜<br/>Transfer_System<br/>75min · 211→286min"]
+        W7["Op 7: 封闭<br/>Incubation_Station<br/>60min · 286→346min"]
+        W8["Op 8: 一抗孵育<br/>Cold_Incubator_4C<br/>720min · 346→1066min"]
+        W9["Op 9: 二抗孵育<br/>Incubation_Station<br/>60min · 1066→1126min"]
+        W10["Op 10: ECL成像<br/>ECL_Imager<br/>15min · 1126→1141min"]
+    end
+
+    subgraph IHC_IF["IHC/IF 组织学检测路径 · 6.4h"]
+        direction LR
+        H11["Op 11: 固定包埋<br/>Tissue_Fixation_Station<br/>120min · 30→150min"]
+        H12["Op 12: 脱蜡复水<br/>IHC_Workstation<br/>30min · 150→180min"]
+        H13["Op 13: 抗原修复<br/>IHC_Workstation<br/>30min · 181→211min"]
+        subgraph IHC_PAR["IHC_Workstation 并行"]
+            direction TB
+            H14["Op 14: IHC染色<br/>180min · 212→392min"]
+            H16["Op 16: IF染色<br/>60min · 393→453min"]
+        end
+        H15["Op 15: DAB显色<br/>IHC_Workstation<br/>15min · 454→469min"]
+        H17["Op 17: IF成像<br/>Fluorescence_Microscope<br/>30min · 453→483min"]
+    end
+
+    S1 --> W2
+    S1 --> H11
+    W2 --> W3
+    W3 --> W4
+    W4 --> W5
+    W5 --> W6
+    W6 --> W7
+    W7 --> W8
+    W8 --> W9
+    W9 --> W10
+    H11 --> H12
+    H12 --> H13
+    H13 --> H14
+    H13 --> H16
+    H14 --> H15
+    H16 --> H17
+
+    classDef split fill:#9C27B0,stroke:#fff,color:#fff,stroke-width:2px
+    classDef wb fill:#4CAF50,stroke:#fff,color:#fff,stroke-width:2px
+    classDef wb_long fill:#1B5E20,stroke:#fff,color:#fff,stroke-width:2px
+    classDef ihc fill:#2196F3,stroke:#fff,color:#fff,stroke-width:2px
+    classDef ifl fill:#FF9800,stroke:#fff,color:#fff,stroke-width:2px
+
+    class S1 split
+    class W2,W3,W4,W5,W6,W7,W9,W10 wb
+    class W8 wb_long
+    class H11,H12,H13,H14,H15 ihc
+    class H16,H17 ifl
 ```
-时间轴 (min)    0        60       120      180      240      300      360      420      480      540      600      660      720      780      840      900      960      1020     1080     1140
-                │        │        │        │        │        │        │        │        │        │        │        │        │        │        │        │        │        │        │        │
-SamplePrep_     ■1■      ■2■                        ■4■
-Station         0-30     31-76                      136-151
 
-ProteinQuantif.          ■3■
-                         76-136
-
-Electrophoresis                   ■5■
-System                            151-211
-
-Transfer_System                            ■6■
-                                           211-286
-
-Incubation_Station                                ■7■                                               ■9■
-                                                  286-346                                          1066-1126
-
-Cold_Incubator_4C                                 ■████████████████████████████████████████████8███████████████████████████████████████████████████████■
-                                                  346──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────1066
-
-ECL_Imager                                                                                           ■10■
-                                                                                                     1126-1141
-
-Tissue_Fixation  ■11■
-Station          30-150
-
-IHC_Workstation           ■12■     ■13■          ■14■                             ■16■   ■15■
-                          150-180  181-211       212-392                          393-453 454-469
-
-Fluorescence_Microscope                                                                     ■17■
-                                                                                            453-483
-
-图例: ■ 操作执行区间    ■███ 长时间孵育（跨越多格）
-颜色: 紫色=样本分裂 | 绿色=WB蛋白检测 | 蓝色=IHC组织学检测 | 橙色=IF荧光检测
-```
+**Mermaid 图表说明：**
+- **紫色节点**：样本分流（分叉点）
+- **绿色节点**：WB 蛋白检测路径
+- **深绿色节点**：4°C 一抗孵育（12h 关键瓶颈）
+- **蓝色节点**：IHC 组织学检测
+- **橙色节点**：IF 荧光检测
+- **并行分支**：IHC 染色与 IF 染色在抗原修复后并行执行
 
 **调度详情表：**
 
