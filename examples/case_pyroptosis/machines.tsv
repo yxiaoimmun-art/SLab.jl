@@ -1,0 +1,11 @@
+Machine_type	Machine_name
+1	SamplePrep_Station
+2	ProteinQuantifier
+3	Electrophoresis_System
+4	Transfer_System
+5	Incubation_Station
+6	Cold_Incubator_4C
+7	ECL_Imager
+8	IHC_Workstation
+9	Fluorescence_Microscope
+10	Tissue_Fixation_Station

@@ -1,0 +1,18 @@
+Operation_ID	Compatible_machine	Processing_time	Note
+1	1	30	Tissue extraction & aliquot (WB/IHC split)
+2	1	45	WB: Protein extraction (lysis + centrifugation)
+3	2	60	WB: BCA protein quantification
+4	1	15	WB: Protein denaturation (95C 5min)
+5	3	60	WB: SDS-PAGE electrophoresis (120V)
+6	4	75	WB: Electrotransfer to PVDF (300mA 4C)
+7	5	60	WB: Membrane blocking (5% skim milk RT 1h)
+8	6	720	WB: Primary antibody incubation (4C overnight)
+9	5	60	WB: Secondary antibody incubation (RT 1h)
+10	7	15	WB: ECL chemiluminescence imaging
+11	10	120	IHC: Fixation + embedding + sectioning
+12	8	30	IHC: Deparaffinization & rehydration
+13	8	30	IHC: Antigen retrieval (EDTA pH8.0 microwave)
+14	8	180	IHC: Immunostaining (block + primary + secondary)
+15	8	15	IHC: DAB color development
+16	8	60	IF: Immunofluorescence staining (ASC speckles)
+17	9	30	IF: Fluorescence imaging (ASC speckle detection)
