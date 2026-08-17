@@ -1,0 +1,8 @@
+Operation_ID_1	Point_1	Operation_ID_2	Point_2	Time_constraint
+1	end	2	start	30
+2	end	3	start	60
+3	end	4	start	30
+4	end	5	start	30
+5	end	6	start	30
+6	end	7	start	60
+7	end	8	start	30
