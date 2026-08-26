@@ -222,36 +222,61 @@ Edges = strict precedence (data + state dependencies). Red node = critical path;
 
 ## 5. INSTRUMENT-LANE OPERATION DIAGRAM
 
+```mermaid
+gantt
+    title 8-OHdG IHC — Instrument-Lane Operation Diagram (lane persistence enforced)
+    dateFormat HH:mm
+    axisFormat %H:%M
+
+    section L-FIX (Fixation station)
+    M1-N1 fix Bouin overnight [H] S1    :fix, 00:00, 12h
+
+    section L-MICRO (Microtome)
+    M1-N2 section [H]                    :sec, after fix, 30m
+
+    section L-DEP (Deparaffinization)
+    M2-N1 xylene [H] QC-no-wax          :xyl, after sec, 10m
+    M2-N2 EtOH gradient [H]             :eth, after xyl, 9m
+
+    section L-AR-MW (Microwave AR — mutex per batch)
+    M3-N2 MW retrieve+cool [H] S2       :mw, after eth, 70m
+
+    section L-RT-BENCH (RT humidity chamber — reused 3x)
+    M4-N1 block [H] QC-serum-match      :blk, after mw, 30m
+    M6-N2 apply 2ary 40m RT [H]         :sec2, after w1, 40m
+    M6-N4 apply ABC 40m RT [H]          :abc, after w2, 40m
+
+    section L-INC-4C (4C incubator — overnight hold)
+    M5-N1 primary overnight [H/A] S3     :pri, after blk, 15h
+
+    section L-WASH (Wash station — reused 3x)
+    M6-N1 wash_post_1ary [H]            :w1, after pri, 15m
+    M6-N3 wash_post_2ary [H]            :w2, after sec2, 15m
+    M6-N5 wash_post_ABC [H]             :w3, after abc, 15m
+
+    section L-STAIN (Staining + scope)
+    M7-N1 develop endpoint [H] QC       :dev, after w3, 12m
+
+    section L-MOUNT (Mounting)
+    M7-N2 stop+rinse [H]                :stp, after dev, 2m
+    M7-N3 mount [H] QC-mount-integrity  :mnt, after stp, 10m
+
+    section L-IMG (Scanner)
+    M7-N4 scan [A] QC-image             :img, after mnt, 10m
 ```
-Legend:  [L-lane]  H=Human op  A=Automatable  ◇=QC  ║=Sync barrier  ▒=wait/idle  ►=active
-         Reuse of same lane across modules is enforced by horizontal lane persistence.
 
-Time axis (compressed, log-style):  T0 ---------- T+12h ---------- T+24h ---------- T+27h ---------- END
-                                     (overnight fixation)  (overnight 1°Ab)   (dev/imaging)
+**Legend:** `[H]=human op` `[A]=automatable` `QC=checkpoint` `S1–S4=sync barriers`.
+Lane persistence: same `section` reused across modules → horizontal lane integrity preserved.
 
-L-FIX      │ M1-N1 H fix_tissue_bouin ║overnight▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒ │                          │
-L-MICRO    │                          │ M1-N2 H section ▒│            │                          │
-L-DEP      │                          │                  │ M2-N1 H xylene │ M2-N2 H EtOH │        │
-L-AR-MW    │                          │                  │                │ M3-N2 H MW retrieve+cool │
-L-AR-AC    │                          │                  │                │ (alt) M3-N3 H autoclave  │
-L-WASH     │                          │                  │                │                │ M6-N1►M6-N3►M6-N5 (reuse) │
-L-RT-BENCH │                          │                  │                │ M4-N1 H block │ M6-N2 H 2°Ab │ M6-N4 H ABC-AP │
-L-INC-4C   │                          │                  │                │                │ M5-N1 H/A 1°Ab overnight ◇4°C ║overnight▒▒▒▒ │
-L-STAIN    │                          │                  │                │                │                                  │ M7-N1 H develop ◇endpoint │
-L-MOUNT    │                          │                  │                │                │                                  │                │ M7-N2►M7-N3 H │
-L-IMG      │                          │                  │                │                │                                  │                │                │ M7-N4 A scan │
-OP-TECH    │ ●════════════════════════════════════════════════════════════════════════════════════════════════════════════════ (single human thread — BOTTLENECK)
-           │ T0                                          T+12h                                  T+24h                                T+27h         END
+**Reuse map (lane persistence):**
+- `L-WASH` reused at M6-N1, M6-N3, M6-N5 (3 sequential occupations; non-overlapping by time-slice)
+- `L-RT-BENCH` reused at M4-N1, M6-N2, M6-N4
+- `L-INC-4C` occupied overnight by M5-N1 (blocks other 4 °C jobs on same chamber)
+- `OP-TECH` reused at every H node (serial human queue — bottleneck)
 
-QC checkpoints: ◇ M1 (fixation uniformity) | ◇ M2 (no wax) | ◇ M3 (slide integrity) | ◇ M4 (serum species match) | ◇ M5 (1°Ab conc + 4°C + neg ctrl) | ◇ M6 (RT + ABC freshness) | ◇ M7-N1 (S/N endpoint) | ◇ M7-N3 (mount integrity) | ◇ M7-N4 (image QC)
-Sync barriers:  ║ S1 quantitative set fixation | ║ S2 retrieval router decision | ║ S3 overnight 1°Ab incubation | ║ S4 development endpoint judgment
+**Sync barriers:** S1 quantitative-set fixation | S2 retrieval router decision | S3 overnight 1°Ab incubation | S4 development endpoint judgment.
 
-Reuse map (lane persistence):
-  • L-WASH reused at M6-N1, M6-N3, M6-N5  (3 sequential occupations; non-overlapping)
-  • L-RT-BENCH reused at M4-N1, M6-N2, M6-N4
-  • L-INC-4C occupied overnight by M5-N1 (blocks other 4 °C jobs on same chamber)
-  • OP-TECH reused at every H node (serial human queue)
-```
+**QC checkpoints:** ◇ M1 (fixation uniformity) | ◇ M2 (no wax) | ◇ M3 (slide integrity) | ◇ M4 (serum species match) | ◇ M5 (1°Ab conc + 4 °C + neg ctrl) | ◇ M6 (RT + ABC freshness) | ◇ M7-N1 (S/N endpoint) | ◇ M7-N3 (mount integrity) | ◇ M7-N4 (image QC).
 
 ---
 
@@ -292,14 +317,29 @@ scheduler_policy:
 
 Critical path (longest weighted chain through DAG):
 
-```
-M1-N1 (12 h)  →  M1-N2 (0.5 h)  →  M2-N1 (0.17 h)  →  M2-N2 (0.15 h)
-   →  M3-N2 (1.17 h)  →  M4-N1 (0.5 h)  →  M5-N1 (15 h overnight, dominant)
-   →  M6-N1 (0.25 h)  →  M6-N2 (0.67 h)  →  M6-N3 (0.25 h)  →  M6-N4 (0.67 h)
-   →  M6-N5 (0.25 h)  →  M7-N1 (0.2 h)  →  M7-N2 (0.05 h)  →  M7-N3 (0.17 h)  →  M7-N4 (0.15 h)
+```mermaid
+flowchart LR
+    A["M1-N1<br/>12 h"] --> B["M1-N2<br/>0.5 h"]
+    B --> C["M2-N1<br/>0.17 h"]
+    C --> D["M2-N2<br/>0.15 h"]
+    D --> E["M3-N2<br/>1.17 h"]
+    E --> F["M4-N1<br/>0.5 h"]
+    F --> G["M5-N1<br/>15 h overnight<br/>DOMINANT"]
+    G --> H["M6-N1<br/>0.25 h"]
+    H --> I["M6-N2<br/>0.67 h"]
+    I --> J["M6-N3<br/>0.25 h"]
+    J --> K["M6-N4<br/>0.67 h"]
+    K --> L["M6-N5<br/>0.25 h"]
+    L --> M["M7-N1<br/>0.2 h"]
+    M --> N["M7-N2<br/>0.05 h"]
+    N --> O["M7-N3<br/>0.17 h"]
+    O --> P["M7-N4<br/>0.15 h → END"]
 
-Σ critical ≈ 27.5 h  (overnight fixation + overnight 1°Ab incubation = ~2× overnight barriers)
+    classDef dom fill:#ff9999,stroke:#cc0000,stroke-width:3px,color:#000
+    class G dom
 ```
+
+**Σ critical ≈ 27.5 h** (overnight fixation + overnight 1°Ab incubation = ~2× overnight barriers).
 
 **Two overnight barriers dominate:** M1-N1 (fixation) and M5-N1 (primary antibody). No critical path can be shortened without violating protocol TCMB lower bounds.
 
@@ -327,47 +367,59 @@ M1-N1 (12 h)  →  M1-N2 (0.5 h)  →  M2-N1 (0.17 h)  →  M2-N2 (0.15 h)
 | 7 | **Chemical waste handling (L-DEP, xylene/mountant)** | facility throughput | Bottleneck if waste collection saturated | Pre-allocate waste carboys; coordinate with EHS pickup cadence |
 
 ### Resource contention heatmap (qualitative)
+
+```mermaid
+block-beta
+    title "Resource Contention Heatmap (qualitative)"
+    columns 7
+
+    space H1["T0"] H2["+6h"] H3["+12h"] H4["+18h"] H5["+24h"] H6["+27h"]
+    R1["OP-TECH"]:5 H1a["HI"] H1b["HI"] H1c["HI"] H1d["HI"] H1e["HI"] H1f["lo"]
+    R2["L-INC-4C"] H2a["lo"] H2b["HI"] H2c["HI"] H2d["HI"] H2e["lo"] H2f["lo"]
+    R3["L-WASH"] H3a["lo"] H3b["lo"] H3c["lo"] H3d["lo"] H3e["HI"] H3f["lo"]
+    R4["L-RT-BENCH"] H4a["lo"] H4b["lo"] H4c["lo"] H4d["lo"] H4e["HI"] H4f["lo"]
+    R5["L-AR-MW"] H5a["lo"] H5b["lo"] H5c["HI"] H5d["lo"] H5e["lo"] H5f["lo"]
+    R6["L-STAIN"] H6a["lo"] H6b["lo"] H6c["lo"] H6d["lo"] H6e["lo"] H6f["HI"]
+
+    classDef hi fill:#ff6666,stroke:#cc0000,color:#000
+    classDef lo fill:#dddddd,stroke:#999999,color:#000
+    classDef lbl fill:#e8e8e8,stroke:#666,color:#000
+    class H1,H2,H3,H4,H5,H6,R1,R2,R3,R4,R5,R6 lbl
+    class H1a,H1b,H1c,H1d,H1e,H2b,H2c,H2d,H3e,H4e,H5c,H6f hi
+    class H1f,H2a,H2e,H2f,H3a,H3b,H3c,H3d,H3f,H4a,H4b,H4c,H4d,H4f,H5a,H5b,H5d,H5e,H5f,H6a,H6b,H6c,H6d,H6e lo
 ```
-              T0    +6h   +12h   +18h   +24h   +27h
-OP-TECH       ███   ███    ███    ███    ███    █     ← sustained high
-L-INC-4C      ░░░   ███    ███    ███    ░░░    ░     ← overnight block
-L-WASH        ░░░   ░░░    ░░░    ░░░    █      ░     ← 3 bursts in module 6
-L-RT-BENCH    ░░░   ░░░    ░░░    ░░░    ███    ░     ← 3 sequential RT steps
-L-AR-MW       ░░░   ░░░    █      ░░░    ░░░    ░     ← single cooldown
-L-STAIN       ░░░   ░░░    ░░░    ░░░    ░░░    █     ← visual endpoint only
-```
-█ = high contention   ░ = idle/low
+
+**Legend:** `HI`=high contention (red) | `lo`=idle/low (grey). Each row = one resource lane; columns = time buckets.
 
 ---
 
 ## 9. STATE TRANSITION SUMMARY (sample-state machine)
 
-```
-[raw_tissue] --M1-N1--> [fixed_block] --M1-N2--> [sectioned_slide]
-   |                                                       |
-   | (paraffin branch)                                    (Bouin branch)
-   v                                                       |
-[deparaffinized_slide] --M2-N2--> [rehydrated_slide]       |
-   |                                                       |
-   v                                                       |
-[retrieved_slide] <─── M3-N2/N3 ──── (paraffin only)        |
-   |                                                       |
-   +---------------------->+-------------------------------+
-                           |
-                           v
-                  [blocked_slide] --M5-N1--> [primary_bound]
-                                                  |
-                                                  v
-                                          [secondary_bound] --M6-N4--> [abc_ap_bound]
-                                                                          |
-                                                                          v
-                                                                  [developed_slide]
-                                                                          |
-                                                                          v
-                                                                  [mounted_permanent_slide]
-                                                                          |
-                                                                          v
-                                                                  [image_record]  END
+```mermaid
+stateDiagram-v2
+    [*] --> raw_tissue
+    raw_tissue --> fixed_block : M1-N1 fix (Bouin overnight)
+    fixed_block --> sectioned_slide : M1-N2 embed & section
+
+    sectioned_slide --> deparaffinized_slide : M2-N1 (paraffin branch)
+    deparaffinized_slide --> rehydrated_slide : M2-N2 EtOH gradient
+    rehydrated_slide --> retrieved_slide : M3-N2 / M3-N3 (paraffin branch only)
+
+    sectioned_slide --> blocked_slide : direct (Bouin branch — no AR)
+    rehydrated_slide --> blocked_slide : (paraffin branch)
+    retrieved_slide --> blocked_slide : AR complete
+
+    blocked_slide --> primary_bound : M5-N1 1°Ab overnight 4 °C
+    primary_bound --> washed_post_1 : M6-N1 wash
+    washed_post_1 --> secondary_bound : M6-N2 2°Ab 40m RT
+    secondary_bound --> washed_post_2 : M6-N3 wash
+    washed_post_2 --> abc_ap_bound : M6-N4 ABC-AP 40m RT
+    abc_ap_bound --> washed_post_3 : M6-N5 wash
+    washed_post_3 --> developed_slide : M7-N1 develop (visual endpoint)
+    developed_slide --> stopped_slide : M7-N2 stop & rinse
+    stopped_slide --> mounted_permanent_slide : M7-N3 mount
+    mounted_permanent_slide --> image_record : M7-N4 scan
+    image_record --> [*]
 ```
 
 ---
@@ -376,8 +428,8 @@ L-STAIN       ░░░   ░░░    ░░░    ░░░    ░░░    �
 
 Compliance with `labauto_prompt.md`:
 - ✅ Modular task nodes (Section 1)
-- ✅ Instrument resource lanes (Section 5, persistent horizontal lanes)
-- ✅ Operators (OP-TECH), state transitions (Section 9), data flow edges (Section 1 + DAG)
+- ✅ Instrument resource lanes (Section 5, persistent horizontal lanes via Mermaid gantt)
+- ✅ Operators (OP-TECH), state transitions (Section 9 via Mermaid stateDiagram), data flow edges (Section 1 + DAG)
 - ✅ Synchronization barriers (S1–S4)
 - ✅ QC checkpoints (9 sites, all marked ◇)
 - ✅ Temporal constraints (Section 3 TCMB)
@@ -387,3 +439,4 @@ Compliance with `labauto_prompt.md`:
 - ✅ TCMB modeling (min/max/coupled/sync)
 - ✅ Output format: modular decomposition, resource map, TCMB matrix, DAG, lane diagram, scheduling logic, critical path, bottleneck analysis
 - ✅ Terminology from discrete-event systems, manufacturing scheduling, orchestration engines, industrial automation, cyber-physical systems
+- ✅ All diagrams rendered in Mermaid format (flowchart / gantt / stateDiagram / block-beta)
