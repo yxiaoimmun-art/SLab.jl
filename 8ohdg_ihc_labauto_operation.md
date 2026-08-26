@@ -167,66 +167,56 @@
 
 ## 4. OPERATION DAG (DIRECTED ACYCLIC GRAPH)
 
-```
-                    ┌──────────────────────────────────────────────────────┐
-                    │ M1-N1 fix_tissue_bouin  [≥12h, overnight]            │
-                    └──────────────────────────┬───────────────────────────┘
-                                               │
-                                               ▼
-                                       M1-N2 embed_and_section
-                                               │
-                       ┌───────────────────────┼───────────────────────────┐
-                       │ (Bouin, no AR)        │ (paraffin)                 │
-                       │                       ▼                            │
-                       │               M2-N1 deparaffinize_xylene            │
-                       │                       │                            │
-                       │                       ▼                            │
-                       │               M2-N2 rehydrate_ethanol              │
-                       │                       │                            │
-                       │                       ▼                            │
-                       │               M3-N1 retrieval router ◀── SYNC     │
-                       │                       │                            │
-                       │             ┌─────────┴─────────┐                  │
-                       │             ▼                   ▼                  │
-                       │   M3-N2 microwave AR    M3-N3 autoclave AR         │
-                       │   [5m boil + 1h cool]  [10m @ 121 °C]              │
-                       │             │                   │                  │
-                       │             └─────────┬─────────┘                  │
-                       │                       ▼                            │
-                       └──────────────────► M4-N1 apply_blocking_serum ◀── SYNC
-                                               │
-                                               ▼
-                                  M5-N1 apply_primary_N45.1  [overnight 4 °C] ◀── CRITICAL PATH
-                                               │
-                                               ▼
-                                  M6-N1 wash_post_primary
-                                               │
-                                               ▼
-                                  M6-N2 apply_secondary_biotin [40 min RT]
-                                               │
-                                               ▼
-                                  M6-N3 wash_post_secondary
-                                               │
-                                               ▼
-                                  M6-N4 apply_ABC_AP_complex [40 min RT]
-                                               │
-                                               ▼
-                                  M6-N5 wash_post_ABC
-                                               │
-                                               ▼
-                                  M7-N1 develop_chromogen [visual endpoint] ◀── QC
-                                               │
-                                               ▼
-                                  M7-N2 stop_and_rinse
-                                               │
-                                               ▼
-                                  M7-N3 dehydrate_clear_mount
-                                               │
-                                               ▼
-                                  M7-N4 image_slide  →  END
+```mermaid
+flowchart TD
+    M1N1["M1-N1 fix_tissue_bouin<br/>[≥12h overnight]"]
+    M1N2["M1-N2 embed_and_section"]
+    M2N1["M2-N1 deparaffinize_xylene"]
+    M2N2["M2-N2 rehydrate_ethanol"]
+    M3N1{{"M3-N1 retrieval router<br/>SYNC"}}
+    M3N2["M3-N2 microwave AR<br/>5m boil + 1h cool"]
+    M3N3["M3-N3 autoclave AR<br/>10m @ 121 °C"]
+    M4N1["M4-N1 apply_blocking_serum<br/>SYNC"]
+    M5N1["M5-N1 apply_primary_N45.1<br/>overnight 4 °C — CRITICAL PATH"]
+    M6N1["M6-N1 wash_post_primary"]
+    M6N2["M6-N2 apply_secondary_biotin<br/>40 min RT"]
+    M6N3["M6-N3 wash_post_secondary"]
+    M6N4["M6-N4 apply_ABC_AP_complex<br/>40 min RT"]
+    M6N5["M6-N5 wash_post_ABC"]
+    M7N1["M7-N1 develop_chromogen<br/>visual endpoint — QC"]
+    M7N2["M7-N2 stop_and_rinse"]
+    M7N3["M7-N3 dehydrate_clear_mount"]
+    M7N4["M7-N4 image_slide → END"]
+
+    M1N1 --> M1N2
+    M1N2 -->|Bouin, no AR| M4N1
+    M1N2 -->|paraffin| M2N1
+    M2N1 --> M2N2
+    M2N2 --> M3N1
+    M3N1 -->|MICROWAVE| M3N2
+    M3N1 -->|AUTOCLAVE| M3N3
+    M3N2 --> M4N1
+    M3N3 --> M4N1
+    M4N1 --> M5N1
+    M5N1 --> M6N1
+    M6N1 --> M6N2
+    M6N2 --> M6N3
+    M6N3 --> M6N4
+    M6N4 --> M6N5
+    M6N5 --> M7N1
+    M7N1 --> M7N2
+    M7N2 --> M7N3
+    M7N3 --> M7N4
+
+    classDef critical fill:#ff9999,stroke:#cc0000,stroke-width:2px,color:#000
+    classDef qc fill:#ffe6cc,stroke:#d79b00,color:#000
+    classDef sync fill:#d5e8d4,stroke:#82b366,color:#000
+    class M5N1 critical
+    class M7N1 qc
+    class M3N1,M4N1 sync
 ```
 
-Edges = strict precedence (data + state dependencies). Bold labels in DAG identify critical path nodes.
+Edges = strict precedence (data + state dependencies). Red node = critical path; orange = QC checkpoint; green = synchronization barrier.
 
 ---
 
