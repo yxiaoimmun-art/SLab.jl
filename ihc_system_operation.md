@@ -3,6 +3,17 @@
 > Generated per `labauto_prompt.md` — a systems-engineering / MES-style lab-automation operation model.
 > All durations in **minutes** unless stated otherwise. "s" = seconds.
 
+## 0. Antibody Reagent Specification (Primary Antibody Input)
+
+The M4 primary-antibody operation (O18) binds a target primary antibody to the retrieved epitopes. The validated antibody panel and its IHC-P dilution window feed directly into O18's reagent dispensing sub-step and TCMB C20 (dilution constraint).
+
+| Antibody | Catalog # | Host / Clonality | Reactivity | Validated IHC-P dilution | Source page |
+|----------|-----------|------------------|------------|--------------------------|-------------|
+| Anti-GPR49/LGR5 Polyclonal Antibody (bs-1117R) | bs-1117R | Rabbit / Polyclonal IgG | Human, Mouse, Rat | **1:200–400** (FFPE IHC-P; reference image run at 1:200 + DAB) | [biossusa.com/products/bs-1117R](https://www.biossusa.com/products/bs-1117R) |
+| Anti-NLRP3 Monoclonal Antibody [E14M24] (F4415) | F4415 | Rabbit / Monoclonal IgG | Human, Mouse, Rat | **1:400–5000** (IHC; positive controls: human colon carcinoma, human lung carcinoma, HUVEC, THP-1, RAW264.7 + LPS) | [selleck.cn/antibodies/nlrp3-antibody-e14m24.html](https://www.selleck.cn/antibodies/nlrp3-antibody-e14m24.html) |
+
+> **Dispatch rule for O18**: pick one antibody row above; dilute in antibody diluent (e.g. 1% BSA / 0.1% Triton X-100 in PBS) inside the validated range. For a first run use the lower bound (GPR49 → 1:200; NLRP3 → 1:400) and titrate upward if signal saturates or background rises.
+
 ## 1. Experiment Modular Decomposition
 
 The wet protocol is decomposed into 7 cyber-physical modules. Each module is a set of atomic, schedulable operations bound to persistent instrument resources, with explicit input/output sample states and QC triggers.
@@ -39,7 +50,7 @@ The wet protocol is decomposed into 7 cyber-physical modules. Each module is a s
 | O31 | Triton X-100 permeabilization (0.1–0.3% in PBS) | M3 | Washed-2 | Permeabilized | 5 | L1 Staining Jar | Blocking | O15 end | Even coverage; no tissue detachment |
 | O16 | Wash buffer | M3 | Permeabilized | Buffer-primed | 5 | L1 Staining Jar | Blocking | O31 end | — |
 | O17 | Block (RT) | M3 | Buffer-primed | Blocked | 60 | L4 Humid Chamber | Non-blocking (timer) | O16 end | Full coverage |
-| O18 | Primary antibody 4°C O/N | M4 | Blocked | Primary-bound | 720 | L5 Cold Incubator | Non-blocking (timer) | O17 end | Antibody spec sheet |
+| O18 | Primary antibody 4°C O/N | M4 | Blocked | Primary-bound | 720 | L5 Cold Incubator + L6 Reagent Dispenser (pre-dilution) | Non-blocking (timer) | O17 end | Antibody panel (§0) + C20 dilution in validated range |
 | O19 | Wash buffer 3×5min | M5 | Primary-bound | Washed-P1 | 15 | L1 Staining Jar | Blocking | O18 end | — |
 | O20 | HRPA incubation RT | M5 | Washed-P1 | HRP-labeled | 30 | L4 Humid Chamber | Non-blocking (timer) | O19 end | Humid-chamber seal |
 | O21 | Wash buffer 3×5min | M5 | HRP-labeled | Washed-P2 | 15 | L1 Staining Jar | Blocking | O20 end | — |
@@ -96,6 +107,7 @@ TCMB (Time Constraints by Mutual Boundaries) entries encode coupled timing: `Op_
 | C17 | O31 | start | O31 | end | 5 | Triton X-100 permeabilization **target duration** (5 min) |
 | C18 | O31 | start | O31 | end | -10 | **Max over-permeabilization tolerance**: O31 must not exceed 10 min (tissue morphology/antigen damage risk) |
 | C19 | O31 | end | O16 | start | 0 | Immediate wash-buffer rinse after permeabilization (no Triton carry-over into block) |
+| C20 | O18 | start | O18 | start | 0 | **Dilution pre-condition gate**: O18 cannot start until the primary antibody (per §0 panel) is dispensed at a dilution within its validated IHC-P range — GPR49/LGR5 (bs-1117R) 1:200–400, or NLRP3 (F4415, E14M24) 1:400–5000; first-run default = lower bound |
 
 > TSV-style rows (for the SLab scheduler) follow below in §6.
 
@@ -456,6 +468,7 @@ Operation_ID_1	Point_1	Operation_ID_2	Point_2	Time_constraint
 31	start	31	end	5
 31	start	31	end	-10
 31	end	16	start	0
+18	start	18	start	0
 ```
 
 **config.tsv**
@@ -475,6 +488,7 @@ N_job	Sequential	Plot_range
 7. **Reusable lanes** — L4 (Humid Chamber) is reused for O14, O17, O20, O23; the scheduler must guarantee slide identity / reagent change-over between consecutive L4 ops.
 8. **pH pre-condition gate (M2)** — O10 cannot start until the L9 citrate buffer reservoir passes pH QC (pH 6.0 ±0.1, C15). Across the 15-min O10+O11 hot window, pH drift is bounded to ±0.2 (C16); failure of either check aborts M2 and re-preps L9 buffer before re-running O10.
 9. **L9 vs L2 dual-resource coupling** — O10 and O11 are scheduled on L2 (microwave, machine type 2) but depend on L9 (citrate reservoir, type 9) for reagent supply and pH monitoring; L9 must be primed and QC'd before O10 enters L2.
+10. **Antibody dilution pre-condition (C20)** — O18 cannot start until the chosen primary antibody from the §0 panel is dispensed (via L6 Reagent Dispenser) at a dilution inside its validated IHC-P window: GPR49/LGR5 (bs-1117R) 1:200–400, or NLRP3 (F4415, E14M24) 1:400–5000. First run uses the lower bound (1:200 or 1:400 respectively); out-of-range dilution aborts O18 and re-preps the antibody diluent before retry.
 
 ## 7. Critical Path Analysis
 
@@ -580,4 +594,4 @@ flowchart TD
 
 ---
 
-**Summary.** The IHC protocol is a near-strictly-sequential **31-operation** DAG bound by **9** persistent instrument lanes (L1 staining jar, L2 microwave, L3 cooling bench, L4 humid chamber, L5 cold incubator, L6 reagent dispenser, L7 QC microscope, L8 mounting station, L9 pH 6.0 citrate buffer reservoir). M3 includes a **Triton X-100 permeabilization step (O31, 5 min, 0.1–0.3% in PBS)** inserted between the post-H2O2 wash (O15) and the wash-buffer rinse (O16), bounded by a 5-min target (C17) and a 10-min over-permeabilization ceiling (C18) with an immediate post-perm rinse (C19). M2 antigen retrieval uses **10 mM sodium citrate buffer at pH 6.0 ±0.1**, with a pre-condition pH gate (C15) before O10 and a ±0.2 pH-drift tolerance across the 15-min O10+O11 hot window (C16). The dominant bottleneck is the overnight primary-antibody incubation (O18, 720 min, 70.3% of the ~1024-min critical path); the Staining Jar Station (L1) is the dominant *resource-contention* bottleneck, reused by 23 of 31 ops. The only meaningful parallelism is the 1-min DAB-prep overlap (O22) gated by a ≤10-min DAB-stability TCMB window and a ≤1-min quench tolerance at O24. All diagrams above are Mermaid flowcharts: §4 Operation DAG (with pH gate ⚑ before O10 + O31 in M3), §5 Instrument-Lane diagram (+ L9 pH-QC lane + O31 in L1 + parallel-region zoom), §6.1 state-machine (with Permeabilized state), §7 critical path, §8 bottleneck pie + sensitivity tree.
+**Summary.** The IHC protocol is a near-strictly-sequential **31-operation** DAG bound by **9** persistent instrument lanes (L1 staining jar, L2 microwave, L3 cooling bench, L4 humid chamber, L5 cold incubator, L6 reagent dispenser, L7 QC microscope, L8 mounting station, L9 pH 6.0 citrate buffer reservoir). A new §0 antibody panel specifies two validated primary antibodies for O18: **GPR49/LGR5 (bs-1117R, 1:200–400)** and **NLRP3 (F4415/E14M24, 1:400–5000)**, enforced by dilution pre-condition gate C20. M3 includes a **Triton X-100 permeabilization step (O31, 5 min, 0.1–0.3% in PBS)** inserted between the post-H2O2 wash (O15) and the wash-buffer rinse (O16), bounded by a 5-min target (C17) and a 10-min over-permeabilization ceiling (C18) with an immediate post-perm rinse (C19). M2 antigen retrieval uses **10 mM sodium citrate buffer at pH 6.0 ±0.1**, with a pre-condition pH gate (C15) before O10 and a ±0.2 pH-drift tolerance across the 15-min O10+O11 hot window (C16). The dominant bottleneck is the overnight primary-antibody incubation (O18, 720 min, 70.3% of the ~1024-min critical path); the Staining Jar Station (L1) is the dominant *resource-contention* bottleneck, reused by 23 of 31 ops. The only meaningful parallelism is the 1-min DAB-prep overlap (O22) gated by a ≤10-min DAB-stability TCMB window and a ≤1-min quench tolerance at O24. All diagrams above are Mermaid flowcharts: §4 Operation DAG (with pH gate ⚑ before O10 + O31 in M3), §5 Instrument-Lane diagram (+ L9 pH-QC lane + O31 in L1 + parallel-region zoom), §6.1 state-machine (with Permeabilized state), §7 critical path, §8 bottleneck pie + sensitivity tree.
