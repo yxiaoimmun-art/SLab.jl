@@ -10,7 +10,7 @@ The wet protocol is decomposed into 7 cyber-physical modules. Each module is a s
 | Module | Responsibility | Ops (range) | Sample state transition (in → out) |
 |--------|---------------|-------------|--------------------------------------|
 | M1 Dewax & Rehydrate | Remove paraffin, rehydrate tissue | O1–O9 | Paraffin block → Aqueous-rehydrated section |
-| M2 Antigen Retrieval | Unmask epitopes by heat | O10–O12 | Rehydrated → Epitope-exposed |
+| M2 Antigen Retrieval | Unmask epitopes by heat (pH 6.0 citrate buffer) | O10–O12 | Rehydrated → Epitope-exposed |
 | M3 Pre-stain Wash & Block | Quench peroxidase, block non-specific sites | O13–O17 | Epitope-exposed → Blocked (NS-sites occupied) |
 | M4 Primary Antibody | Bind primary antibody to target | O18 | Blocked → Primary-bound |
 | M5 Secondary Detection | HRP-polymer secondary incubation | O19–O21 | Primary-bound → HRP-labeled |
@@ -30,8 +30,8 @@ The wet protocol is decomposed into 7 cyber-physical modules. Each module is a s
 | O7 | 95% EtOH 2/2 | M1 | 95% EtOH-1 | 95% EtOH-2 | 10 | L1 Staining Jar | Blocking | O6 end | — |
 | O8 | dH2O rinse 1/2 | M1 | 95% EtOH-2 | Rinse-1 | 5 | L1 Staining Jar | Blocking | O7 end | — |
 | O9 | dH2O rinse 2/2 | M1 | Rinse-1 | Rehydrated | 5 | L1 Staining Jar | Blocking | O8 end | — |
-| O10 | Citrate immersion + heat-to-boil | M2 | Rehydrated | Pre-boil | 5 | L2 Microwave | Blocking | O9 end | Boil onset |
-| O11 | Sub-boil incubate 95–98°C | M2 | Pre-boil | Retrieved | 10 | L2 Microwave | Blocking | O10 end (Δ≤0) | Temp in 95–98°C |
+| O10 | pH 6.0 citrate immersion + heat-to-boil | M2 | Rehydrated | Pre-boil | 5 | L2 Microwave + L9 Citrate Buffer Reservoir (pH 6.0) | Blocking | O9 end | Boil onset; pH 6.0 ±0.1 |
+| O11 | Sub-boil incubate 95–98°C (pH 6.0 citrate) | M2 | Pre-boil | Retrieved | 10 | L2 Microwave | Blocking | O10 end (Δ≤0) | Temp 95–98°C; pH drift <0.2 |
 | O12 | Bench cool | M2 | Retrieved | Cooled-retrieved | 30 | L3 Cooling Bench | Non-blocking (timer) | O11 end | ΔT to RT |
 | O13 | dH2O wash 3×5min | M3 | Cooled-retrieved | Washed-1 | 15 | L1 Staining Jar | Blocking | O12 end | — |
 | O14 | 3% H2O2 incubation | M3 | Washed-1 | Peroxidase-quenched | 10 | L4 Humid Chamber | Blocking | O13 end | Bubble absence |
@@ -59,15 +59,16 @@ Persistent instrument resources are modelled as reusable **lanes**. A lane is oc
 | Lane | Machine type | Machine name | Capacity | Reused by ops | Role |
 |------|--------------|--------------|----------|---------------|------|
 | L1 | 1 | Staining Jar Station (Coplin jars: xylene / 100% EtOH / 95% EtOH / dH2O / wash buffer) | 1 slide rack/jar | O1–O9, O13, O15, O16, O19, O21, O24–O29 | Solvent exchange & rinses |
-| L2 | 2 | Microwave Oven | 1 slide tray | O10, O11 | Heat-induced epitope retrieval |
+| L2 | 2 | Microwave Oven | 1 slide tray | O10, O11 | Heat-induced epitope retrieval (pH 6.0 citrate) |
 | L3 | 3 | Cooling Bench | multi-slide | O12 | Passive cool-down |
 | L4 | 4 | Humid Incubation Chamber (RT) | multi-slide | O14, O17, O20, O23 | Antibody/DAB humid incubation |
 | L5 | 5 | Cold Incubator (4°C) | multi-slide | O18 | Overnight primary antibody |
 | L6 | 6 | Reagent Dispenser | 1 prep | O22 | DAB working-solution preparation |
 | L7 | 7 | QC Microscope Station | 1 slide | O23 | Real-time DAB monitoring |
 | L8 | 8 | Mounting Station | 1 slide | O30 | Coverslip sealing |
+| L9 | 9 | Citrate Buffer Reservoir (10 mM sodium citrate, pH 6.0 ±0.1, RT) | 1 slide tray bath | O10 (load), O11 (held) | Antigen-retrieval reagent supply & pH QC |
 
-> **Human vs automated**: In a mes-model of this protocol the bulk of solvent-exchange ops (L1) and reagent-addition ops (L4/L6/L8) are **operator-driven** (manual transfer of slide rack between jars / manual pipetting). L2 (microwave), L3 (cooling), L5 (cold incubator) and L7 (imaging) are **instrument-driven** with non-blocking timer semantics.
+> **Human vs automated**: In a mes-model of this protocol the bulk of solvent-exchange ops (L1), reagent-addition ops (L4/L6/L8), and the pH 6.0 citrate buffer preparation/loading of L9 are **operator-driven** (manual transfer of slide rack between jars / manual pipetting / manual pH meter check). L2 (microwave), L3 (cooling), L5 (cold incubator) and L7 (imaging) are **instrument-driven** with non-blocking timer semantics.
 
 ## 3. TCMB Constraint Matrix
 
@@ -89,6 +90,8 @@ TCMB (Time Constraints by Mutual Boundaries) entries encode coupled timing: `Op_
 | C12 | O18 | start | O18 | end | -960 | Primary Ab max incubation tolerance (~16 h ceiling) |
 | C13 | O21 | end | O23 | start | 0 | DAB apply gated by completion of last wash |
 | C14 | O12 | end | O13 | start | 0 | No rinse delay after cool-down |
+| C15 | O10 | start | O10 | start | 0 | **pH pre-condition gate**: O10 cannot start until L9 citrate buffer QC confirms pH 6.0 ±0.1 (pre-state assertion, not a timer) |
+| C16 | O10 | start | O11 | end | -15 | **pH drift tolerance**: citrate pH must remain within 6.0 ±0.2 across O10+O11 (15-min hot-window); pH meter log sampled at O10 start and O11 end |
 
 > TSV-style rows (for the SLab scheduler) follow below in §6.
 
@@ -111,9 +114,9 @@ flowchart TD
         O9["O9 dH2O rinse 2/2<br/>5m · L1"]:::op
     end
 
-    subgraph M2["M2 — Antigen Retrieval"]
-        O10["O10 Heat-to-boil<br/>5m · L2 Microwave"]:::opAuto
-        O11["O11 Sub-boil 95-98C<br/>10m · L2"]:::opAuto
+    subgraph M2["M2 — Antigen Retrieval (pH 6.0 citrate)"]
+        O10["O10 pH6 citrate + heat-to-boil<br/>5m · L2+L9"]:::opAuto
+        O11["O11 Sub-boil 95-98C (pH6 citrate)<br/>10m · L2"]:::opAuto
         O12["O12 Bench cool<br/>30m · L3 Cooling"]:::opWait
     end
 
@@ -152,7 +155,8 @@ flowchart TD
 
     START --> O1
     O1 --> O2 --> O3 --> O4 --> O5 --> O6 --> O7 --> O8 --> O9
-    O9 --> O10
+    O9 --> PHGATE{{"⚑ pH gate: citrate pH 6.0 ±0.1 (L9 QC)"}}
+    PHGATE -->|C15: pre-condition| O10
     O10 -->|C1: T=0 heat coupling| O11
     O11 -->|C2: T=0| O12
     O12 --> O13
@@ -206,10 +210,10 @@ flowchart LR
       L1t["O29<br/>Xyl<br/>20s"]:::op
     end
 
-    subgraph L2["L2 · Microwave Oven"]
+    subgraph L2["L2 · Microwave Oven (pH 6.0 citrate)"]
       direction LR
-      L2a["O10<br/>Boil<br/>5m"]:::opAuto
-      L2b["O11<br/>Sub-boil<br/>10m"]:::opAuto
+      L2a["O10<br/>pH6-cit + boil<br/>5m"]:::opAuto
+      L2b["O11<br/>Sub-boil pH6<br/>10m"]:::opAuto
     end
 
     subgraph L3["L3 · Cooling Bench"]
@@ -245,9 +249,20 @@ flowchart LR
       L8a["O30<br/>Mount<br/>2m"]:::op
     end
 
+    subgraph L9["L9 · Citrate Buffer Reservoir (pH 6.0)"]
+      direction LR
+      L9qc["⚑ pH QC: 6.0 ±0.1"]:::opQC
+      L9a["O10 load<br/>citrate bath"]:::op
+      L9b["O11 held<br/>pH-drift log"]:::opQC
+    end
+
     START --> L1a
     L1a --> L1b --> L1c --> L1d --> L1e --> L1f --> L1g --> L1h --> L1i
-    L1i --> L2a --> L2b
+    L1i --> L9qc
+    L9qc -->|C15 pH gate| L9a
+    L9a --> L2a
+    L2a --> L2b
+    L2b -.pH log.-> L9b
     L2b --> L3a
     L3a --> L1j
     L1j --> L4a
@@ -335,6 +350,7 @@ Machine_type	Machine_name
 6	Reagent Dispenser
 7	QC Microscope
 8	Mounting Station
+9	Citrate Buffer Reservoir pH6.0
 ```
 
 **operations.tsv** (30 ops; durations in minutes; O27–O29 rounded up to 1m for scheduler granularity)
@@ -349,8 +365,8 @@ Operation_ID	Compatible_machine	Processing_time	Note
 7	1	10	95% EtOH 2/2
 8	1	5	dH2O rinse 1/2
 9	1	5	dH2O rinse 2/2
-10	2	5	Heat-to-boil
-11	2	10	Sub-boil 95-98C
+10	2	5	pH6.0 citrate heat-to-boil
+11	2	10	Sub-boil 95-98C pH6.0 citrate
 12	3	30	Bench cool
 13	1	15	dH2O 3x5m
 14	4	10	3% H2O2
@@ -423,6 +439,8 @@ Operation_ID_1	Point_1	Operation_ID_2	Point_2	Time_constraint
 23	end	24	start	0
 23	end	24	start	-1
 12	end	13	start	0
+10	start	10	start	0
+10	start	11	end	-15
 ```
 
 **config.tsv**
@@ -440,6 +458,8 @@ N_job	Sequential	Plot_range
 5. **QC gating** — O23 → O24 transition is gated by the QC microscope (L7) reaching an acceptable signal/background ratio; failure triggers re-development (re-run O23) within the same window.
 6. **Resource contention** — L1 (Staining Jar Station) is the single most contended lane (22 of 30 ops). It is the bottleneck on both ends of the timeline and must be batched (multi-slide racks) for throughput.
 7. **Reusable lanes** — L4 (Humid Chamber) is reused for O14, O17, O20, O23; the scheduler must guarantee slide identity / reagent change-over between consecutive L4 ops.
+8. **pH pre-condition gate (M2)** — O10 cannot start until the L9 citrate buffer reservoir passes pH QC (pH 6.0 ±0.1, C15). Across the 15-min O10+O11 hot window, pH drift is bounded to ±0.2 (C16); failure of either check aborts M2 and re-preps L9 buffer before re-running O10.
+9. **L9 vs L2 dual-resource coupling** — O10 and O11 are scheduled on L2 (microwave, machine type 2) but depend on L9 (citrate reservoir, type 9) for reagent supply and pH monitoring; L9 must be primed and QC'd before O10 enters L2.
 
 ## 7. Critical Path Analysis
 
@@ -456,8 +476,8 @@ Critical path = the longest **must-be-sequential** chain through the DAG. The on
 | 7 | O7 95% EtOH 2/2 | 10 | 55 |
 | 8 | O8 dH2O 1/2 | 5 | 60 |
 | 9 | O9 dH2O 2/2 | 5 | 65 |
-| 10 | O10 Heat-to-boil | 5 | 70 |
-| 11 | O11 Sub-boil | 10 | 80 |
+| 10 | O10 pH6 citrate heat-to-boil | 5 | 70 |
+| 11 | O11 Sub-boil (pH6 citrate) | 10 | 80 |
 | 12 | O12 Bench cool | 30 | 110 |
 | 13 | O13 dH2O 3×5m | 15 | 125 |
 | 14 | O14 3% H2O2 | 10 | 135 |
@@ -507,6 +527,7 @@ flowchart LR
 | 5 | **DAB window O23 (1–10 m, L4+L7)** | Operator-dependent monitoring + immediate quench (C8/C9, ≤1 m tolerance) | Risk of over/under-development; QC failure → re-run O23 | Automate imaging + timed quench (L7→L1 robotic transfer); pre-stage quench jar |
 | 6 | **DAB stability C5 (max 10 m)** | O22 prep must converge with O21 end within 10 m | Couples reagent dispensing to wash schedule; hard sync barrier | Trigger O22 only when O21 has ≤1 m remaining; do not prep DAB speculatively |
 | 7 | **Microwave heat-coupling C1 (T=0)** | O10 boil-onset → O11 sub-boil must be seamless | Microwave lid/opening timing risk; thermal overshoot | Use programmable microwave with boil-detect + auto-hold at 95–98 °C |
+| 8 | **pH 6.0 citrate pre-condition (C15) + drift (C16)** | O10 blocked until L9 buffer passes pH 6.0 ±0.1; pH must hold within ±0.2 across the 15-min O10+O11 hot window | Adds QC gate before M2 starts; pH drift failure aborts O10 and re-preps L9 | Use pre-titrated 10 mM sodium citrate pH 6.0 stock; pH-probe the reservoir immediately before O10; log pH at O11 end; replenish buffer between slide batches |
 
 ### Bottleneck contribution
 
@@ -542,4 +563,4 @@ flowchart TD
 
 ---
 
-**Summary.** The IHC protocol is a near-strictly-sequential 30-operation DAG bound by 7 persistent instrument lanes. The dominant bottleneck is the overnight primary-antibody incubation (O18, 720 min, 70.7% of the ~1019-min critical path); the Staining Jar Station (L1) is the dominant *resource-contention* bottleneck, reused by 22 of 30 ops. The only meaningful parallelism is the 1-min DAB-prep overlap (O22) gated by a ≤10-min DAB-stability TCMB window and a ≤1-min quench tolerance at O24. All diagrams above are Mermaid flowcharts: §4 Operation DAG, §5 Instrument-Lane diagram (+ parallel-region zoom), §6.1 state-machine, §7 critical path, §8 bottleneck pie + sensitivity tree.
+**Summary.** The IHC protocol is a near-strictly-sequential 30-operation DAG bound by **9** persistent instrument lanes (L1 staining jar, L2 microwave, L3 cooling bench, L4 humid chamber, L5 cold incubator, L6 reagent dispenser, L7 QC microscope, L8 mounting station, L9 pH 6.0 citrate buffer reservoir). M2 antigen retrieval uses **10 mM sodium citrate buffer at pH 6.0 ±0.1**, with a pre-condition pH gate (C15) before O10 and a ±0.2 pH-drift tolerance across the 15-min O10+O11 hot window (C16). The dominant bottleneck is the overnight primary-antibody incubation (O18, 720 min, 70.7% of the ~1019-min critical path); the Staining Jar Station (L1) is the dominant *resource-contention* bottleneck, reused by 22 of 30 ops. The only meaningful parallelism is the 1-min DAB-prep overlap (O22) gated by a ≤10-min DAB-stability TCMB window and a ≤1-min quench tolerance at O24. All diagrams above are Mermaid flowcharts: §4 Operation DAG (with pH gate ⚑ before O10), §5 Instrument-Lane diagram (+ L9 pH-QC lane + parallel-region zoom), §6.1 state-machine, §7 critical path, §8 bottleneck pie + sensitivity tree.
