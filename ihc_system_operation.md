@@ -11,7 +11,7 @@ The wet protocol is decomposed into 7 cyber-physical modules. Each module is a s
 |--------|---------------|-------------|--------------------------------------|
 | M1 Dewax & Rehydrate | Remove paraffin, rehydrate tissue | O1–O9 | Paraffin block → Aqueous-rehydrated section |
 | M2 Antigen Retrieval | Unmask epitopes by heat (pH 6.0 citrate buffer) | O10–O12 | Rehydrated → Epitope-exposed |
-| M3 Pre-stain Wash & Block | Quench peroxidase, block non-specific sites | O13–O17 | Epitope-exposed → Blocked (NS-sites occupied) |
+| M3 Pre-stain Wash & Block | Quench peroxidase, permeabilize membranes, block non-specific sites | O13–O17, O31 | Epitope-exposed → Blocked (NS-sites occupied) |
 | M4 Primary Antibody | Bind primary antibody to target | O18 | Blocked → Primary-bound |
 | M5 Secondary Detection | HRP-polymer secondary incubation | O19–O21 | Primary-bound → HRP-labeled |
 | M6 DAB Development | Chromogen deposition + quench | O22–O24 | HRP-labeled → Chromogen-deposited |
@@ -36,7 +36,8 @@ The wet protocol is decomposed into 7 cyber-physical modules. Each module is a s
 | O13 | dH2O wash 3×5min | M3 | Cooled-retrieved | Washed-1 | 15 | L1 Staining Jar | Blocking | O12 end | — |
 | O14 | 3% H2O2 incubation | M3 | Washed-1 | Peroxidase-quenched | 10 | L4 Humid Chamber | Blocking | O13 end | Bubble absence |
 | O15 | dH2O wash 2×5min | M3 | Peroxidase-quenched | Washed-2 | 10 | L1 Staining Jar | Blocking | O14 end | — |
-| O16 | Wash buffer | M3 | Washed-2 | Buffer-primed | 5 | L1 Staining Jar | Blocking | O15 end | — |
+| O31 | Triton X-100 permeabilization (0.1–0.3% in PBS) | M3 | Washed-2 | Permeabilized | 5 | L1 Staining Jar | Blocking | O15 end | Even coverage; no tissue detachment |
+| O16 | Wash buffer | M3 | Permeabilized | Buffer-primed | 5 | L1 Staining Jar | Blocking | O31 end | — |
 | O17 | Block (RT) | M3 | Buffer-primed | Blocked | 60 | L4 Humid Chamber | Non-blocking (timer) | O16 end | Full coverage |
 | O18 | Primary antibody 4°C O/N | M4 | Blocked | Primary-bound | 720 | L5 Cold Incubator | Non-blocking (timer) | O17 end | Antibody spec sheet |
 | O19 | Wash buffer 3×5min | M5 | Primary-bound | Washed-P1 | 15 | L1 Staining Jar | Blocking | O18 end | — |
@@ -58,7 +59,7 @@ Persistent instrument resources are modelled as reusable **lanes**. A lane is oc
 
 | Lane | Machine type | Machine name | Capacity | Reused by ops | Role |
 |------|--------------|--------------|----------|---------------|------|
-| L1 | 1 | Staining Jar Station (Coplin jars: xylene / 100% EtOH / 95% EtOH / dH2O / wash buffer) | 1 slide rack/jar | O1–O9, O13, O15, O16, O19, O21, O24–O29 | Solvent exchange & rinses |
+| L1 | 1 | Staining Jar Station (Coplin jars: xylene / 100% EtOH / 95% EtOH / dH2O / wash buffer / Triton X-100 in PBS) | 1 slide rack/jar | O1–O9, O13, O15, O16, O19, O21, O24–O29, O31 | Solvent exchange, rinses & permeabilization |
 | L2 | 2 | Microwave Oven | 1 slide tray | O10, O11 | Heat-induced epitope retrieval (pH 6.0 citrate) |
 | L3 | 3 | Cooling Bench | multi-slide | O12 | Passive cool-down |
 | L4 | 4 | Humid Incubation Chamber (RT) | multi-slide | O14, O17, O20, O23 | Antibody/DAB humid incubation |
@@ -92,6 +93,9 @@ TCMB (Time Constraints by Mutual Boundaries) entries encode coupled timing: `Op_
 | C14 | O12 | end | O13 | start | 0 | No rinse delay after cool-down |
 | C15 | O10 | start | O10 | start | 0 | **pH pre-condition gate**: O10 cannot start until L9 citrate buffer QC confirms pH 6.0 ±0.1 (pre-state assertion, not a timer) |
 | C16 | O10 | start | O11 | end | -15 | **pH drift tolerance**: citrate pH must remain within 6.0 ±0.2 across O10+O11 (15-min hot-window); pH meter log sampled at O10 start and O11 end |
+| C17 | O31 | start | O31 | end | 5 | Triton X-100 permeabilization **target duration** (5 min) |
+| C18 | O31 | start | O31 | end | -10 | **Max over-permeabilization tolerance**: O31 must not exceed 10 min (tissue morphology/antigen damage risk) |
+| C19 | O31 | end | O16 | start | 0 | Immediate wash-buffer rinse after permeabilization (no Triton carry-over into block) |
 
 > TSV-style rows (for the SLab scheduler) follow below in §6.
 
@@ -120,10 +124,11 @@ flowchart TD
         O12["O12 Bench cool<br/>30m · L3 Cooling"]:::opWait
     end
 
-    subgraph M3["M3 — Pre-stain Wash & Block"]
+    subgraph M3["M3 — Pre-stain Wash, Permeabilize & Block"]
         O13["O13 dH2O 3x5m<br/>15m · L1"]:::op
         O14["O14 3% H2O2<br/>10m · L4"]:::op
         O15["O15 dH2O 2x5m<br/>10m · L1"]:::op
+        O31["O31 Triton X-100 perm<br/>5m · L1"]:::op
         O16["O16 Wash buffer<br/>5m · L1"]:::op
         O17["O17 Block RT<br/>60m · L4"]:::opWait
     end
@@ -160,7 +165,9 @@ flowchart TD
     O10 -->|C1: T=0 heat coupling| O11
     O11 -->|C2: T=0| O12
     O12 --> O13
-    O13 --> O14 --> O15 --> O16 --> O17
+    O13 --> O14 --> O15 -->|post-H2O2 wash| O31
+    O31 -->|C19: immediate rinse| O16
+    O16 --> O17
     O17 -->|C10: T=0| O18
     O18 -->|C11: min 720m| O19
     O19 --> O20 --> O21
@@ -199,6 +206,7 @@ flowchart LR
       L1i["O9<br/>dH2O2<br/>5m"]:::op
       L1j["O13<br/>dH2O3<br/>15m"]:::op
       L1k["O15<br/>dH2O4<br/>10m"]:::op
+      L1perm["O31<br/>Triton<br/>5m"]:::op
       L1l["O16<br/>Wbuf1<br/>5m"]:::op
       L1m["O19<br/>Wbuf2<br/>15m"]:::op
       L1n["O21<br/>Wbuf3<br/>15m"]:::op
@@ -266,7 +274,8 @@ flowchart LR
     L2b --> L3a
     L3a --> L1j
     L1j --> L4a
-    L4a --> L1k --> L1l
+    L4a --> L1k -->|post-H2O2 wash| L1perm
+    L1perm -->|C19 rinse| L1l
     L1l --> L4b
     L4b --> L5a
     L5a --> L1m
@@ -325,7 +334,8 @@ stateDiagram-v2
     Dewaxed --> Rehydrated : O9
     Rehydrated --> EpitopeExposed : M2 (heat+cool)
     EpitopeExposed --> PeroxidaseQuenched : O14
-    PeroxidaseQuenched --> Blocked : O17
+    PeroxidaseQuenched --> Permeabilized : O31 (Triton X-100)
+    Permeabilized --> Blocked : O17
     Blocked --> PrimaryBound : O18 (O/N)
     PrimaryBound --> HRPLabeled : O20
     HRPLabeled --> ChromoDeposited : O23 (QC monitor)
@@ -386,6 +396,7 @@ Operation_ID	Compatible_machine	Processing_time	Note
 28	1	1	Dehyd 100% EtOH 2x10s
 29	1	1	Clear xylene 2x10s
 30	8	2	Mount
+31	1	5	Triton X-100 perm
 ```
 
 **dependency.tsv** (DAG edges; O22 attaches to O21 with a sync join at O23)
@@ -405,7 +416,8 @@ Operation_ID_1	Operation_ID_2
 12	13
 13	14
 14	15
-15	16
+15	31
+31	16
 16	17
 17	18
 18	19
@@ -441,6 +453,9 @@ Operation_ID_1	Point_1	Operation_ID_2	Point_2	Time_constraint
 12	end	13	start	0
 10	start	10	start	0
 10	start	11	end	-15
+31	start	31	end	5
+31	start	31	end	-10
+31	end	16	start	0
 ```
 
 **config.tsv**
@@ -482,34 +497,35 @@ Critical path = the longest **must-be-sequential** chain through the DAG. The on
 | 13 | O13 dH2O 3×5m | 15 | 125 |
 | 14 | O14 3% H2O2 | 10 | 135 |
 | 15 | O15 dH2O 2×5m | 10 | 145 |
-| 16 | O16 Wash buffer | 5 | 150 |
-| 17 | O17 Block | 60 | 210 |
-| 18 | **O18 Primary Ab O/N** | **720** | **930** |
-| 19 | O19 Wash 3×5m | 15 | 945 |
-| 20 | O20 HRPA | 30 | 975 |
-| 21 | O21 Wash 3×5m | 15 | 990 |
-| 22 | O23 DAB dev (max) | 10 | 1000 |
-| 23 | O24 Quench | 1 | 1001 |
-| 24 | O25 Hematoxylin | 3 | 1004 |
-| 25 | O26 dH2O 2×5m | 10 | 1014 |
-| 26 | O27 Dehyd 95% | 1 | 1015 |
-| 27 | O28 Dehyd 100% | 1 | 1016 |
-| 28 | O29 Clear xylene | 1 | 1017 |
-| 29 | O30 Mount | 2 | 1019 |
+| 16 | O31 Triton X-100 perm | 5 | 150 |
+| 17 | O16 Wash buffer | 5 | 155 |
+| 18 | O17 Block | 60 | 215 |
+| 19 | **O18 Primary Ab O/N** | **720** | **935** |
+| 20 | O19 Wash 3×5m | 15 | 950 |
+| 21 | O20 HRPA | 30 | 980 |
+| 22 | O21 Wash 3×5m | 15 | 995 |
+| 23 | O23 DAB dev (max) | 10 | 1005 |
+| 24 | O24 Quench | 1 | 1006 |
+| 25 | O25 Hematoxylin | 3 | 1009 |
+| 26 | O26 dH2O 2×5m | 10 | 1019 |
+| 27 | O27 Dehyd 95% | 1 | 1020 |
+| 28 | O28 Dehyd 100% | 1 | 1021 |
+| 29 | O29 Clear xylene | 1 | 1022 |
+| 30 | O30 Mount | 2 | 1024 |
 
-> **Total critical path ≈ 1019 min (~17 h)**, of which **720 min (70.7%)** is the single overnight primary-antibody step O18. Excluding O18, the active wet-bench time is ≈ 299 min (~5 h).
+> **Total critical path ≈ 1024 min (~17.1 h)**, of which **720 min (70.3%)** is the single overnight primary-antibody step O18. Excluding O18, the active wet-bench time is ≈ 304 min (~5.1 h).
 
 ### Critical-path mermaid
 
 ```mermaid
 flowchart LR
     CP1["M1 Dewax<br/>65m"]:::cp --> CP2["M2 Retrieval<br/>45m"]:::cp
-    CP2 --> CP3["M3 Wash+Block<br/>90m"]:::cp
+    CP2 --> CP3["M3 Wash+Perm+Block<br/>95m"]:::cp
     CP3 --> CP4["M4 1Ab O/N<br/>720m · BOTTLENECK"]:::cpHot
     CP4 --> CP5["M5 2ndry<br/>60m"]:::cp
     CP5 --> CP6["M6 DAB<br/>11m"]:::cp
     CP6 --> CP7["M7 Mount<br/>17m"]:::cp
-    CP7 --> DONE([~1019m total]):::startEnd
+    CP7 --> DONE([~1024m total]):::startEnd
 
     classDef cp fill:#ebf8ff,stroke:#3182ce,color:#1a365d
     classDef cpHot fill:#fed7d7,stroke:#c53030,color:#742a2a
@@ -520,21 +536,22 @@ flowchart LR
 
 | Rank | Bottleneck | Cause | Impact | Mitigation |
 |------|-----------|-------|--------|-----------|
-| 1 | **O18 Primary Ab O/N (L5)** | 720-min min-incubation on critical path; 70.7% of total makespan | Hard floor on makespan; defines the day-1→day-2 boundary | Schedule O18 last thing day-1; batch many slides per cold-incubator load; consider validated shorter/RT protocols only if QC permits |
-| 2 | **L1 Staining Jar Station (contention)** | 22/30 ops contend one reusable lane; serial jar-to-jar transfers dominate active bench time | Throughput ceiling for multi-slide runs; operator-bound | Use multi-slide racks; pre-stage jars in solvent-grade order; stagger slides across duplicated L1 lanes if hardware allows |
+| 1 | **O18 Primary Ab O/N (L5)** | 720-min min-incubation on critical path; 70.3% of total makespan | Hard floor on makespan; defines the day-1→day-2 boundary | Schedule O18 last thing day-1; batch many slides per cold-incubator load; consider validated shorter/RT protocols only if QC permits |
+| 2 | **L1 Staining Jar Station (contention)** | 23/31 ops contend one reusable lane (now incl. O31 Triton X-100 perm); serial jar-to-jar transfers dominate active bench time | Throughput ceiling for multi-slide runs; operator-bound | Use multi-slide racks; pre-stage jars in solvent-grade order; stagger slides across duplicated L1 lanes if hardware allows |
 | 3 | **O12 Bench cool (30 m)** | Fixed passive cool-down on critical path with no QC shortcut | Adds 30 min before any M3 op can start | Replace passive cool with forced-air / chilled-block cool-down if epitope stability permits |
 | 4 | **O17 Block (60 m, L4)** | 60-min timer; reuses same lane as O14, O20, O23 → identity/ change-over overhead | Serialises L4 occupancy; blocks primary-Ab start | Use ready-made blocker; pre-warm chamber; if validated, shorten to 30 min |
 | 5 | **DAB window O23 (1–10 m, L4+L7)** | Operator-dependent monitoring + immediate quench (C8/C9, ≤1 m tolerance) | Risk of over/under-development; QC failure → re-run O23 | Automate imaging + timed quench (L7→L1 robotic transfer); pre-stage quench jar |
 | 6 | **DAB stability C5 (max 10 m)** | O22 prep must converge with O21 end within 10 m | Couples reagent dispensing to wash schedule; hard sync barrier | Trigger O22 only when O21 has ≤1 m remaining; do not prep DAB speculatively |
 | 7 | **Microwave heat-coupling C1 (T=0)** | O10 boil-onset → O11 sub-boil must be seamless | Microwave lid/opening timing risk; thermal overshoot | Use programmable microwave with boil-detect + auto-hold at 95–98 °C |
 | 8 | **pH 6.0 citrate pre-condition (C15) + drift (C16)** | O10 blocked until L9 buffer passes pH 6.0 ±0.1; pH must hold within ±0.2 across the 15-min O10+O11 hot window | Adds QC gate before M2 starts; pH drift failure aborts O10 and re-preps L9 | Use pre-titrated 10 mM sodium citrate pH 6.0 stock; pH-probe the reservoir immediately before O10; log pH at O11 end; replenish buffer between slide batches |
+| 9 | **Triton X-100 over-perm tolerance (C18, max 10 m)** | O31 target 5 min; over-incubation damages tissue morphology/antigen | Risk of morphology loss → QC failure → re-stain from M1 | Use timer-enforced L1 jar; pre-stage wash buffer jar (O16) for immediate C19 rinse; do not leave slides unattended during O31 |
 
 ### Bottleneck contribution
 
 ```mermaid
 pie title Critical-path time share by module
     "M4 Primary Ab O/N (bottleneck)" : 720
-    "M3 Pre-stain Wash & Block" : 90
+    "M3 Pre-stain Wash, Perm & Block" : 95
     "M1 Dewax & Rehydrate" : 65
     "M5 Secondary Detection" : 60
     "M2 Antigen Retrieval" : 45
@@ -563,4 +580,4 @@ flowchart TD
 
 ---
 
-**Summary.** The IHC protocol is a near-strictly-sequential 30-operation DAG bound by **9** persistent instrument lanes (L1 staining jar, L2 microwave, L3 cooling bench, L4 humid chamber, L5 cold incubator, L6 reagent dispenser, L7 QC microscope, L8 mounting station, L9 pH 6.0 citrate buffer reservoir). M2 antigen retrieval uses **10 mM sodium citrate buffer at pH 6.0 ±0.1**, with a pre-condition pH gate (C15) before O10 and a ±0.2 pH-drift tolerance across the 15-min O10+O11 hot window (C16). The dominant bottleneck is the overnight primary-antibody incubation (O18, 720 min, 70.7% of the ~1019-min critical path); the Staining Jar Station (L1) is the dominant *resource-contention* bottleneck, reused by 22 of 30 ops. The only meaningful parallelism is the 1-min DAB-prep overlap (O22) gated by a ≤10-min DAB-stability TCMB window and a ≤1-min quench tolerance at O24. All diagrams above are Mermaid flowcharts: §4 Operation DAG (with pH gate ⚑ before O10), §5 Instrument-Lane diagram (+ L9 pH-QC lane + parallel-region zoom), §6.1 state-machine, §7 critical path, §8 bottleneck pie + sensitivity tree.
+**Summary.** The IHC protocol is a near-strictly-sequential **31-operation** DAG bound by **9** persistent instrument lanes (L1 staining jar, L2 microwave, L3 cooling bench, L4 humid chamber, L5 cold incubator, L6 reagent dispenser, L7 QC microscope, L8 mounting station, L9 pH 6.0 citrate buffer reservoir). M3 includes a **Triton X-100 permeabilization step (O31, 5 min, 0.1–0.3% in PBS)** inserted between the post-H2O2 wash (O15) and the wash-buffer rinse (O16), bounded by a 5-min target (C17) and a 10-min over-permeabilization ceiling (C18) with an immediate post-perm rinse (C19). M2 antigen retrieval uses **10 mM sodium citrate buffer at pH 6.0 ±0.1**, with a pre-condition pH gate (C15) before O10 and a ±0.2 pH-drift tolerance across the 15-min O10+O11 hot window (C16). The dominant bottleneck is the overnight primary-antibody incubation (O18, 720 min, 70.3% of the ~1024-min critical path); the Staining Jar Station (L1) is the dominant *resource-contention* bottleneck, reused by 23 of 31 ops. The only meaningful parallelism is the 1-min DAB-prep overlap (O22) gated by a ≤10-min DAB-stability TCMB window and a ≤1-min quench tolerance at O24. All diagrams above are Mermaid flowcharts: §4 Operation DAG (with pH gate ⚑ before O10 + O31 in M3), §5 Instrument-Lane diagram (+ L9 pH-QC lane + O31 in L1 + parallel-region zoom), §6.1 state-machine (with Permeabilized state), §7 critical path, §8 bottleneck pie + sensitivity tree.
