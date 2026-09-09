@@ -14,6 +14,17 @@ The M4 primary-antibody operation (O18) binds a target primary antibody to the r
 
 > **Dispatch rule for O18**: pick one antibody row above; dilute in antibody diluent (e.g. 1% BSA / 0.1% Triton X-100 in PBS) inside the validated range. For a first run use the lower bound (GPR49 → 1:200; NLRP3 → 1:400) and titrate upward if signal saturates or background rises.
 
+## 0.1 Sample & Group Specification
+
+The protocol is executed on a 6-sample panel grouped by treatment condition. Sample identity must be preserved through all L1/L4/L5 lane transfers and recorded at the O18 antibody-dispensing gate and O25 hematoxylin counterstain.
+
+| Sample ID | Treatment group | Description | N (replicates) |
+|-----------|-----------------|-------------|----------------|
+| #7, #9, #12 | **Dss** | Dextran Sulfate Sodium (DSS) colitis model only | 3 |
+| #20, #23, #24 | **Nic/Dss** | Nicotine + DSS (combination / prophylactic treatment) | 3 |
+
+> **Batch-scheduling implication**: both groups run the identical IHC DAG (O1–O31); group identity is a sample-level metadata tag, not a separate operation branch. The 6 slides are processed as one rack through L1 (staining jars) and L4 (humid chamber) whenever batch capacity allows, so that `N_job` = 6 slides sharing one timeline. Group comparison (Dss vs Nic/Dss) is performed downstream at the quantification stage, not inside the operation plan.
+
 ## 1. Experiment Modular Decomposition
 
 The wet protocol is decomposed into 7 cyber-physical modules. Each module is a set of atomic, schedulable operations bound to persistent instrument resources, with explicit input/output sample states and QC triggers.
@@ -471,10 +482,10 @@ Operation_ID_1	Point_1	Operation_ID_2	Point_2	Time_constraint
 18	start	18	start	0
 ```
 
-**config.tsv**
+**config.tsv** (`N_job=6` for the 6-sample panel — 3 Dss + 3 Nic/Dss; group identity carried as sample metadata)
 ```
 N_job	Sequential	Plot_range
-1	0	5
+6	0	5
 ```
 
 ### 6.3 Orchestration rules
@@ -594,4 +605,4 @@ flowchart TD
 
 ---
 
-**Summary.** The IHC protocol is a near-strictly-sequential **31-operation** DAG bound by **9** persistent instrument lanes (L1 staining jar, L2 microwave, L3 cooling bench, L4 humid chamber, L5 cold incubator, L6 reagent dispenser, L7 QC microscope, L8 mounting station, L9 pH 6.0 citrate buffer reservoir). A new §0 antibody panel specifies two validated primary antibodies for O18: **GPR49/LGR5 (bs-1117R, 1:200–400)** and **NLRP3 (F4415/E14M24, 1:400–5000)**, enforced by dilution pre-condition gate C20. M3 includes a **Triton X-100 permeabilization step (O31, 5 min, 0.1–0.3% in PBS)** inserted between the post-H2O2 wash (O15) and the wash-buffer rinse (O16), bounded by a 5-min target (C17) and a 10-min over-permeabilization ceiling (C18) with an immediate post-perm rinse (C19). M2 antigen retrieval uses **10 mM sodium citrate buffer at pH 6.0 ±0.1**, with a pre-condition pH gate (C15) before O10 and a ±0.2 pH-drift tolerance across the 15-min O10+O11 hot window (C16). The dominant bottleneck is the overnight primary-antibody incubation (O18, 720 min, 70.3% of the ~1024-min critical path); the Staining Jar Station (L1) is the dominant *resource-contention* bottleneck, reused by 23 of 31 ops. The only meaningful parallelism is the 1-min DAB-prep overlap (O22) gated by a ≤10-min DAB-stability TCMB window and a ≤1-min quench tolerance at O24. All diagrams above are Mermaid flowcharts: §4 Operation DAG (with pH gate ⚑ before O10 + O31 in M3), §5 Instrument-Lane diagram (+ L9 pH-QC lane + O31 in L1 + parallel-region zoom), §6.1 state-machine (with Permeabilized state), §7 critical path, §8 bottleneck pie + sensitivity tree.
+**Summary.** The IHC protocol is a near-strictly-sequential **31-operation** DAG bound by **9** persistent instrument lanes (L1 staining jar, L2 microwave, L3 cooling bench, L4 humid chamber, L5 cold incubator, L6 reagent dispenser, L7 QC microscope, L8 mounting station, L9 pH 6.0 citrate buffer reservoir), scheduled for a **6-sample panel** (§0.1): **#7, #9, #12 = Dss** (3 reps) and **#20, #23, #24 = Nic/Dss** (3 reps); all six share one operation timeline (N_job=6) and group identity is carried as sample metadata rather than splitting the DAG. A §0 antibody panel specifies two validated primary antibodies for O18: **GPR49/LGR5 (bs-1117R, 1:200–400)** and **NLRP3 (F4415/E14M24, 1:400–5000)**, enforced by dilution pre-condition gate C20. M3 includes a **Triton X-100 permeabilization step (O31, 5 min, 0.1–0.3% in PBS)** inserted between the post-H2O2 wash (O15) and the wash-buffer rinse (O16), bounded by a 5-min target (C17) and a 10-min over-permeabilization ceiling (C18) with an immediate post-perm rinse (C19). M2 antigen retrieval uses **10 mM sodium citrate buffer at pH 6.0 ±0.1**, with a pre-condition pH gate (C15) before O10 and a ±0.2 pH-drift tolerance across the 15-min O10+O11 hot window (C16). The dominant bottleneck is the overnight primary-antibody incubation (O18, 720 min, 70.3% of the ~1024-min critical path); the Staining Jar Station (L1) is the dominant *resource-contention* bottleneck, reused by 23 of 31 ops. The only meaningful parallelism is the 1-min DAB-prep overlap (O22) gated by a ≤10-min DAB-stability TCMB window and a ≤1-min quench tolerance at O24. All diagrams above are Mermaid flowcharts: §4 Operation DAG (with pH gate ⚑ before O10 + O31 in M3), §5 Instrument-Lane diagram (+ L9 pH-QC lane + O31 in L1 + parallel-region zoom), §6.1 state-machine (with Permeabilized state), §7 critical path, §8 bottleneck pie + sensitivity tree.
